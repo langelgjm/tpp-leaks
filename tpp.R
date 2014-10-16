@@ -6,6 +6,8 @@ groups <- read.table("groups.csv", sep=",", header=FALSE,fill=TRUE,col.names=c(1
 stringsAsFactors=FALSE)
 countries <- read.table("countries.csv", sep=",", header=FALSE,fill=TRUE,col.names=c(1:12),
 stringsAsFactors=FALSE)
+countries_old <- read.table("countries_old.csv", sep=",", header=FALSE,fill=TRUE,col.names=c(1:12),
+		stringsAsFactors=FALSE)
 
 # create list of country codes
 codes <- c("AU","BN","CA","CL","JP","MX","MY","NZ","PE","SG","US","VN")
@@ -211,3 +213,247 @@ names(single_df) <- c("Country", "Sole Proposals", "Total Proposals", "Ratio", "
 
 library(xtable)
 print(xtable(single_df), type="html", include.rownames=FALSE, file="table1.html")
+
+###########################################################################
+# Clustering approach
+
+library(MASS)
+library(ggplot2)
+library(Matrix)
+library(xtable)
+library(RColorBrewer)
+
+# create matrix of dyadic frequencies
+m <- matrix(ncol=12, nrow=12)
+# convert countries_df to matrix
+m[cbind(countries_df$country1, countries_df$country2)] <- countries_df$freq
+colnames(m) <- codes
+row.names(m) <- codes
+#plot(hclust(dist(m)))
+positions <- m
+
+# For comparison, create another from the earlier leak
+# This should run through each row of code_combos, and tell us if 
+# it is present in each line of groups, producing a matrix
+countries_matrix <- apply(countries_old, 1, 
+		function(x) apply(code_combos, 1, 
+					function(y) all(y %in% x)))
+# Now handle the sole proposers
+# This runs through for just the single code combos
+countries_matrix_sole <- apply(countries_old, 1, 
+		function(x) apply(single_code_combos, 1, 
+					function(y) all(y %in% x[1] & nchar(x[2])==0 ) ) )
+
+# now bind matrices together
+countries_matrix <- rbind(countries_matrix,countries_matrix_sole)
+code_combos <- rbind(code_combos, single_code_combos)
+
+# Trick to convert logical matrix to numeric matrix
+countries_matrix <- countries_matrix * 1
+# Now row sums will provide a frequency count for each pair
+countries_freq <- rowSums(countries_matrix)
+
+# Start making a data frame
+countries_old_df <- data.frame(country1 = code_combos[,1], country2 = code_combos[,2])
+countries_old_df$freq <- countries_freq
+# Make labels
+countries_old_df$label <- apply(countries_old_df, 1, function(x) paste(x[1], x[2]))
+# Reorder
+countries_old_df <- countries_old_df[order(countries_old_df$freq),]
+
+# create matrix of dyadic frequencies
+m_old <- matrix(ncol=12, nrow=12)
+# convert countries_df to matrix
+m_old[cbind(countries_old_df$country1, countries_old_df$country2)] <- countries_old_df$freq
+colnames(m_old) <- codes
+row.names(m_old) <- codes
+#plot(hclust(dist(m)))
+positions_old <- m_old
+
+
+
+# Euclidean distance
+tmp <- as.matrix(dist(t(m)))
+tmp[upper.tri(tmp, diag=TRUE)] <- NA
+#xtable(tmp, digits=c(0,rep(1,12)))
+# Manhattan distance
+#dist(t(positions), method="manhattan")
+
+#library(gplots)
+png("tpp_heatmap_clust.png", height=640,width=640)
+par(mar=c(0,0,0,0))
+#par(mar=c(5.1,8.1,4.1,2.1))
+# Euclidean distance
+tmp <- as.matrix(dist(t(positions)))
+#tmp[lower.tri(tmp, diag=TRUE)] <- NA
+heatmap(tmp, symm=TRUE, col=rev(brewer.pal(9,"Blues")), cexRow=1.5, cexCol=1.5)
+#heatmap.2(tmp, symm=TRUE, col=rev(brewer.pal(9,"Blues")))
+#heatmap(tmp, symm=TRUE, main="Heat Map of Euclidean Distances between TPP Negotiating Positions")
+#heatmap(tmp, Rowv=NA, Colv=NA, col=rev(heat.colors(24)), symm = TRUE,
+#		main=expression(atop("Heat Map of TPP Negotiating Position Overlap", atop("CC BY-SA 3.0, Gabriel J. Michael, gmichael@gwu.edu"))))
+dev.off()
+
+############ MDS ################
+
+library(lsa)
+
+create_ggplot <- function(input_data, legend_title, 
+		chapter_title, 
+		file_name, 
+		x_min, x_max, x_by,
+		y_min, y_max, y_by,
+		new_jitter,
+		x_min_jitter, x_max_jitter, 
+		y_min_jitter, y_max_jitter,
+		width, height, dpi) {
+	
+	# Only create new jitter if explicitly told to do so
+	if (new_jitter == TRUE) {
+		input_data$xj <- input_data$x + runif(nrow(input_data),x_min_jitter,x_max_jitter)
+		input_data$yj <- input_data$y + runif(nrow(input_data),y_min_jitter,y_max_jitter)
+	}
+	
+	ggp <- ggplot(data=input_data, aes(x=xj, y=yj, color=issue)) + 
+			geom_point(size=15) +
+			geom_point(size=12, 
+					color="white", 
+					show_guide=FALSE) +
+			geom_text(size=6, 
+					aes(label=nums), 
+					color="black") +
+			theme(axis.text = element_text(size=20), 
+					axis.ticks=element_blank(), 
+					axis.title = element_text(size=20), 
+					plot.title=element_text(size=20), 
+#					legend.title = element_text(size=16), 
+#					legend.text=element_text(size=16),
+					legend.position="none") +
+			scale_x_continuous(limits=c(x_min,x_max), 
+					breaks=seq(x_min,x_max,by=x_by), 
+					name="x") + 
+			scale_y_continuous(limits=c(y_min,y_max), 
+					breaks=seq(y_min,y_max,by=y_by), 
+					name="y") + 
+			scale_color_discrete(name=legend_title) + 
+			guides(colour = guide_legend(ncol=2, override.aes = list(size=7), 
+							title.position="bottom", 
+							title.hjust=0.5)) +
+			coord_fixed() + 
+			geom_vline(xintercept=0, 
+					colour="#999999", 
+					linetype="longdash") + 
+			geom_hline(yintercept=0, 
+					colour="#999999", 
+					linetype="longdash") + 
+			ggtitle(
+					bquote(
+							atop(paste("TPP IP Chapter Distances, ", .(chapter_title), sep=""), 
+									atop("CC BY-SA 3.0 Gabriel J. Michael, gabriel.michael@yale.edu", ""))))
+	ggsave(file_name, ggp, width=width, height=height, dpi=dpi)
+	return(ggp)
+}
+
+
+labels <- codes
+label_nums <- 1:length(codes)
+
+positions_dist <- dist(positions)
+# Alternatively
+#tpp[is.na(tpp)] <- 0
+#positions_dist <- acos(cosine(as.matrix(t(tpp))))
+positions_mds <- isoMDS(positions_dist)
+positions_mds_gg <- data.frame(x=positions_mds$points[,1], 
+		y=positions_mds$points[,2], 
+		issue=labels, 
+		nums=labels)
+
+
+create_ggplot(positions_mds_gg, "Intellectual Property Chapter", "May 16, 2014 Leak", 
+		"tpp_may_16_2014_dist.png", 
+		-70, 60, 10, -45, 30, 10, TRUE, -.5, .5, -.5, .5, 9, 7, 72)
+
+
+positions_old_dist <- dist(positions_old)
+# Alternatively
+#tpp[is.na(tpp)] <- 0
+#positions_dist <- acos(cosine(as.matrix(t(tpp))))
+positions_old_mds <- isoMDS(positions_old_dist)
+positions_old_mds_gg <- data.frame(x=positions_old_mds$points[,1], 
+		y=positions_old_mds$points[,2], 
+		issue=labels, 
+		nums=labels)
+
+create_ggplot(positions_old_mds_gg, "Intellectual Property Chapter", "August 30, 2013", 
+		"tpp_august_30_2013_dist.png", 
+		-300, 450, 50, -250, 200, 50, TRUE, -.5, .5, -.5, .5, 9, 7, 72)
+
+
+p <- positions_old_mds_gg
+p$xend <- positions_mds_gg$x
+p$yend <- positions_mds_gg$y
+
+input_data <- p
+input_data$x <- input_data$x + runif(nrow(input_data),-15,15)
+input_data$y <- input_data$y + runif(nrow(input_data),-10,10)
+
+
+require(grid)
+ggplot(data=input_data, aes(x=x, y=y, color=issue)) +
+		geom_point(x=0, y=0, size=6, shape=8, color="black") + 
+		geom_segment(data=input_data, aes(x=x, y=y, xend=xend, yend=yend), size=2, 
+				arrow=arrow(angle=22.5, length=unit(.125, "inches") ,type="closed")) +
+		geom_point(size=15) +
+		geom_point(size=12, 
+				color="white", 
+				show_guide=FALSE) +
+		geom_text(size=6, 
+				aes(label=codes), 
+				color="black") +
+		theme(axis.text = element_text(size=20), 
+				axis.ticks=element_blank(), 
+#				axis.title = element_text(size=20), 
+				axis.title = element_blank(), 
+				plot.title=element_text(size=20), 
+				axis.text.x = element_blank(),
+				axis.text.y = element_blank(),
+				panel.grid.major = element_blank(), 
+				panel.grid.minor = element_blank(), 
+#					legend.title = element_text(size=16), 
+#					legend.text=element_text(size=16),
+				legend.position="none") +
+#		scale_x_continuous(limits=c(x_min,x_max), 
+#				breaks=seq(x_min,x_max,by=x_by), 
+#				name="x") + 
+#		scale_y_continuous(limits=c(y_min,y_max), 
+#				breaks=seq(y_min,y_max,by=y_by), 
+#				name="y") + 
+#		scale_color_discrete(name=legend_title) + 
+#		guides(colour = guide_legend(ncol=2, override.aes = list(size=7), 
+#						title.position="bottom", 
+#						title.hjust=0.5)) +
+		coord_fixed() + 
+#		geom_vline(xintercept=0, 
+#				colour="#999999", 
+#				linetype="longdash") + 
+#		geom_hline(yintercept=0, 
+#				colour="#999999", 
+#				linetype="longdash") + 
+		ggtitle(
+				bquote(
+						atop(paste("Changes in TPP IP Chapter Negotiating Positions, ", "8/30/13 to 5/16/14", sep=""), 
+								atop("CC BY-SA Gabriel J. Michael, gabriel.michael@yale.edu", ""))))
+ggsave("tmp.png", width=9, height=7, dpi=72)
+
+
+
+
+
+
+positions_mds <- cmdscale(positions_dist)
+cmdscale(positions_dist, eig=TRUE)
+positions_mds_gg <- data.frame(x=positions_mds[,1], 
+		y=positions_mds[,2], 
+		issue=labels, 
+		nums=labels)
+
+
