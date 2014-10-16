@@ -314,6 +314,7 @@ create_ggplot <- function(input_data, legend_title,
 	}
 	
 	ggp <- ggplot(data=input_data, aes(x=xj, y=yj, color=issue)) + 
+			geom_point(x=0, y=0, size=6, shape=8, color="black") + 
 			geom_point(size=15) +
 			geom_point(size=12, 
 					color="white", 
@@ -323,8 +324,12 @@ create_ggplot <- function(input_data, legend_title,
 					color="black") +
 			theme(axis.text = element_text(size=20), 
 					axis.ticks=element_blank(), 
-					axis.title = element_text(size=20), 
+#					axis.title = element_text(size=20), 
+					axis.title = element_blank(), 
 					plot.title=element_text(size=20), 
+					axis.text.x=element_blank(),
+					axis.text.y=element_blank(),
+					panel.grid.minor = element_blank(), 
 #					legend.title = element_text(size=16), 
 #					legend.text=element_text(size=16),
 					legend.position="none") +
@@ -339,16 +344,16 @@ create_ggplot <- function(input_data, legend_title,
 							title.position="bottom", 
 							title.hjust=0.5)) +
 			coord_fixed() + 
-			geom_vline(xintercept=0, 
-					colour="#999999", 
-					linetype="longdash") + 
-			geom_hline(yintercept=0, 
-					colour="#999999", 
-					linetype="longdash") + 
+#			geom_vline(xintercept=0, 
+#					colour="#999999", 
+#					linetype="longdash") + 
+#			geom_hline(yintercept=0, 
+#					colour="#999999", 
+#					linetype="longdash") + 
 			ggtitle(
 					bquote(
-							atop(paste("TPP IP Chapter Distances, ", .(chapter_title), sep=""), 
-									atop("CC BY-SA 3.0 Gabriel J. Michael, gabriel.michael@yale.edu", ""))))
+							atop(paste("TPP IP Chapter Negotiating Positions, ", .(chapter_title), sep=""), 
+									atop("CC BY-SA Gabriel J. Michael, gabriel.michael@yale.edu", ""))))
 	ggsave(file_name, ggp, width=width, height=height, dpi=dpi)
 	return(ggp)
 }
@@ -399,6 +404,8 @@ input_data$y <- input_data$y + runif(nrow(input_data),-10,10)
 
 require(grid)
 ggplot(data=input_data, aes(x=x, y=y, color=issue)) +
+		geom_rect(xmin=-70, xmax=60, ymin=-45, ymax=30, linetype=2, 
+				color="black", fill="grey") + 
 		geom_point(x=0, y=0, size=6, shape=8, color="black") + 
 		geom_segment(data=input_data, aes(x=x, y=y, xend=xend, yend=yend), size=2, 
 				arrow=arrow(angle=22.5, length=unit(.125, "inches") ,type="closed")) +
