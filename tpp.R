@@ -229,7 +229,7 @@ m <- matrix(ncol=12, nrow=12)
 m[cbind(countries_df$country1, countries_df$country2)] <- countries_df$freq
 colnames(m) <- codes
 row.names(m) <- codes
-#plot(hclust(dist(m)))
+plot(hclust(dist(m)))
 positions <- m
 
 # For comparison, create another from the earlier leak
@@ -267,8 +267,9 @@ m_old <- matrix(ncol=12, nrow=12)
 m_old[cbind(countries_old_df$country1, countries_old_df$country2)] <- countries_old_df$freq
 colnames(m_old) <- codes
 row.names(m_old) <- codes
-#plot(hclust(dist(m)))
+plot(hclust(dist(m_old)))
 positions_old <- m_old
+
 
 
 
@@ -362,7 +363,8 @@ create_ggplot <- function(input_data, legend_title,
 labels <- codes
 label_nums <- 1:length(codes)
 
-positions_dist <- dist(positions)
+#positions_dist <- dist(positions)
+positions_dist <- as.dist(t(m))
 # Alternatively
 #tpp[is.na(tpp)] <- 0
 #positions_dist <- acos(cosine(as.matrix(t(tpp))))
@@ -378,7 +380,8 @@ create_ggplot(positions_mds_gg, "Intellectual Property Chapter", "May 16, 2014 L
 		-70, 60, 10, -45, 30, 10, TRUE, -.5, .5, -.5, .5, 9, 7, 72)
 
 
-positions_old_dist <- dist(positions_old)
+#positions_old_dist <- dist(positions_old)
+positions_old_dist <- as.dist(t(positions_old))
 # Alternatively
 #tpp[is.na(tpp)] <- 0
 #positions_dist <- acos(cosine(as.matrix(t(tpp))))
@@ -452,15 +455,120 @@ ggplot(data=input_data, aes(x=x, y=y, color=issue)) +
 ggsave("tmp.png", width=9, height=7, dpi=72)
 
 
+#positions_mds <- cmdscale(positions_dist)
+#cmdscale(positions_dist, eig=TRUE)
+#positions_mds_gg <- data.frame(x=positions_mds[,1], 
+#		y=positions_mds[,2], 
+#		issue=labels, 
+#		nums=labels)
+
+#####################################################################
+# Circos data output
+#####################################################################
+
+# Karyotype data file output
+# chr - au 1 0 66 set3-12-qual-1
+
+# Produce count of number of times a country appears in any group
+# This will specify the width 
+w <- rowSums(apply(groups, 1, function(x) codes %in% x))
+#w <- rowSums(apply(countries, 1, function(x) codes %in% x))
+
+# Really should scale widths by total number of frequency of country's dyads
+codes
+
+
+# Produce output file data
+d <- paste("chr - ", codes, " 1 0 ", w, " set3-12-qual-", rep(1:12), sep="")
+write(d, "karyotype.tpp.txt")
+
+#d <- paste("chr - ", codes, " 1 0 ", nrow(groups), " set3-12-qual-", rep(1:12), sep="")
+#write(d, "karyotype.tpp.txt")
+
+# Link data file output
+# recall that links can (and should?) overlap up to 12 times
+# deal with this by dividing up width of country by width of all links?
+# us 1 25 au 10 30 color=blue
+links <- groups_df
+links <- merge(links, data.frame(country1=codes, w=w), by="country1")
+# starting points must be incremented so that links don't overlap
+# strategy: go through df by country, add freq (width) of prior link to a start variable
+library(plyr)
+# this will produce the total available width for start1 by country
+# ddply(links, .(country1), summarise, sum(freq))
+# define start1 as a running total of freq (widths) by country
+links <- ddply(links, .(country1), transform, start1=cumsum(freq))
+
+# widths based on number of dyads
+a <- ddply(links, .(country1), summarize, tot=sum(freq))
+names(a)[1] <- "country"
+b <- ddply(links, .(country2), summarize, tot=sum(freq))
+names(b)[1] <- "country"
+df <- merge(a, b, by="country", all=TRUE)
+df[is.na(df)] <- 0
+df$tot <- df$tot.x + df$tot.y
+
+library(countrycode)
+names <- countrycode(df$country, "iso2c", "country.name")
+d <- paste("chr - ", df$country, " ", df$country, " 0 ", df$tot, " set3-12-qual-", rep(1:12), sep="")
+write(d, "karyotype.tpp.txt")
+
+# copy start1 to end1
+links$end1 <- links$start1
+# for mapping to width domain
+links <- ddply(links, .(country1), transform, runtot1=cumsum(freq))
+# modify start1 so that it begins at 0 (substract freq)
+links$start1 <- links$start1 - links$freq
+# Now repeat this process for country2 (other side of the link)
+links <- ddply(links, .(country2), transform, start2=cumsum(freq))
+# copy start2 to end2
+links$end2 <- links$start2
+# for mapping to width domain
+links <- ddply(links, .(country2), transform, runtot2=cumsum(freq))
+# modify start2 so that it begins at 0 (substract freq)
+links$start2 <- links$start2 - links$freq
 
 
 
+# Now modify widths of links based on total widths of countries
+#links$start1 <- (links$start1 * links$w) / links$runtot1
+#links$end1 <- (links$end1 * links$w) / links$runtot1
+#links$start2 <- (links$start2 * links$w) / links$runtot2
+#links$end2 <- (links$end2 * links$w) / links$runtot2
 
-positions_mds <- cmdscale(positions_dist)
-cmdscale(positions_dist, eig=TRUE)
-positions_mds_gg <- data.frame(x=positions_mds[,1], 
-		y=positions_mds[,2], 
-		issue=labels, 
-		nums=labels)
+d <- paste(links$country1, links$start1, links$end1, 
+		links$country2, links$start2, links$end2)
+write(d, "links.tpp.txt")
+
+######################
+# Probably would make sense to do it by line (group)
+
+# This gets me a list of matrices
+# each list element is a line (group)
+# each matrix row is a dyad from that line
+m <- apply(groups, 1, function(x) t(combn(x[x != ""],2)))
+
+# Let's graph the links of each line emanating from a single point?
+# the starting and ending point will be defined by the line (group)
+
+tmp <- lapply(m, function(x) apply(x, 1, function(y) paste(y[1], y[2])))
+tmp <- lapply(m, function(x) apply(x, 1, function(y) y))
 
 
+links <- do.call(rbind, m)
+# this gets me the number of rows of each matrix in m
+lengths <- unlist(lapply(m, function(x) nrow(x)))
+
+# vectorized repeat, where each row has the value and number of times
+rep(a, lengths)
+#rle(rep(a, lengths))
+
+links_df <- data.frame(country1=links[,1], country2=links[,2], start1=rep(a, lengths))
+
+links_df$end1 <- links_df$start1
+links_df$start2 <- links_df$start1
+links_df$end2 <- links_df$start1
+
+d <- paste(links_df$country1, links_df$start1, links_df$end1, 
+		links_df$country2, links_df$start2, links_df$end2)
+write(d, "links.tpp.txt")
