@@ -12,6 +12,6 @@ $regex='(?:(?:AU|BN|CA|CL|JP|MX|MY|NZ|PE|SG|US|VN)[0-9]*[\/ :]+)+(?:(?:AU|BN|CA|
 	print "$_\n" for @match = $txt =~ m/$regex/g;
 }
 
-# Remember the output needs to be stripped of numbers, easily done using tr
-# e.g., tr -d '[0-9]' < countries.txt > countries_nofn.txt
+# Remember the output needs to be stripped of numbers, spaecs and colons, easily done using tr
+# e.g., tr -d '[0-9] :' < countries.txt > countries_nofn.txt
 # Then convert to CSV with tr '/' ',' < countries_nofn.txt > countries.csv

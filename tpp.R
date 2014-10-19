@@ -499,6 +499,11 @@ library(plyr)
 # define start1 as a running total of freq (widths) by country
 links <- ddply(links, .(country1), transform, start1=cumsum(freq))
 
+# start1/end1 need to take into account the start2/end2 of other dyads.
+# or rather vice versa
+# so link ends should begin with a minimum value that is the total of all other 
+# link starts for that ideogram
+
 # widths based on number of dyads
 a <- ddply(links, .(country1), summarize, tot=sum(freq))
 names(a)[1] <- "country"
@@ -520,11 +525,13 @@ links <- ddply(links, .(country1), transform, runtot1=cumsum(freq))
 # modify start1 so that it begins at 0 (substract freq)
 links$start1 <- links$start1 - links$freq
 # Now repeat this process for country2 (other side of the link)
-links <- ddply(links, .(country2), transform, start2=cumsum(freq))
+# start2 must begin at the sum of all start1s for that country
+links <- ddply(links, .(country1), transform, start1tot=sum(freq))
+links <- ddply(links, .(country2), transform, start2=start1tot + cumsum(freq))
 # copy start2 to end2
 links$end2 <- links$start2
 # for mapping to width domain
-links <- ddply(links, .(country2), transform, runtot2=cumsum(freq))
+#links <- ddply(links, .(country2), transform, runtot2=cumsum(freq))
 # modify start2 so that it begins at 0 (substract freq)
 links$start2 <- links$start2 - links$freq
 
