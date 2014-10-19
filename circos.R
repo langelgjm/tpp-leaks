@@ -112,20 +112,6 @@ m <- matrix(ncol=12, nrow=12)
 m[cbind(countries_df$country1, countries_df$country2)] <- countries_df$freq
 colnames(m) <- codes
 row.names(m) <- codes
-plot(hclust(dist(m)))
-positions <- m
-
-# For comparison, create another from the earlier leak
-# This should run through each row of code_combos, and tell us if 
-# it is present in each line of groups, producing a matrix
-countries_matrix <- apply(countries_old, 1, 
-		function(x) apply(code_combos, 1, 
-					function(y) all(y %in% x)))
-# Now handle the sole proposers
-# This runs through for just the single code combos
-countries_matrix_sole <- apply(countries_old, 1, 
-		function(x) apply(single_code_combos, 1, 
-					function(y) all(y %in% x[1] & nchar(x[2])==0 ) ) )
 
 # now bind matrices together
 countries_matrix <- rbind(countries_matrix,countries_matrix_sole)
@@ -162,22 +148,65 @@ w <- rowSums(apply(groups, 1, function(x) codes %in% x))
 # recall that links can (and should?) overlap up to 12 times
 # deal with this by dividing up width of country by width of all links?
 # us 1 25 au 10 30 color=blue
-links <- groups_df
-links <- merge(links, data.frame(country1=codes, w=w), by="country1")
+links <- groups_df[1:3]
+#links <- merge(links, data.frame(country1=codes, w=w), by="country1")
 # starting points must be incremented so that links don't overlap
 # strategy: go through df by country, add freq (width) of prior link to a start variable
 library(plyr)
 # this will produce the total available width for start1 by country
 # ddply(links, .(country1), summarise, sum(freq))
 # define start1 as a running total of freq (widths) by country
-links <- ddply(links, .(country1), transform, start1=cumsum(freq))
+# so that each link starts after the previous link
+# define minstart2 as total of all freqs for country1
+# so that minimum start2 for country1 accounts for all links emanating from country1 
+links <- ddply(links, .(country1), transform, start1=cumsum(freq), minstart2=sum(freq))
 
-# start1/end1 need to take into account the start2/end2 of other dyads.
-# or rather vice versa
-# so link ends should begin with a minimum value that is the total of all other 
-# link starts for that ideogram
+# copy start1 to end1
+links$end1 <- links$start1
+# modify start1 so that it begins at 0 (substract freq)
+links$start1 <- links$start1 - links$freq
+# Now start1 and end1 will have the correct width and position
 
-# widths based on number of dyads
+# create start2/end2
+# first create temp df to pull minstart2 from as necessary
+df <- unique(data.frame(country2=links$country1, minstart2c2=links$minstart2))
+# there is no entry for VN in this, though, because there is no VN in country1
+# this means that VN's minstart2 should be 0 anyway
+
+# merge this data frame into links based on country2
+# need all.x, but NOT all.y (creates reverse entry for AU-VN while missing VN level)
+links <- merge(links, df, by="country2", all.x=TRUE)
+# add in minstart data for VN (or any missing minstart2c2)
+links[is.na(links$minstart2c2),"minstart2c2"] <- 0
+# same as above but starting at the minstart2c2
+links <- ddply(links, .(country2), transform, start2=minstart2c2 + cumsum(freq))
+# copy start2 to end2
+links$end2 <- links$start2
+# modify start2 so that it begins at minstart2c2 (substract freq)
+links$start2 <- links$start2 - links$freq
+# Now start2 and end2 will have the correct width and position
+
+
+# for mapping to width domain
+#links <- ddply(links, .(country1), transform, runtot1=cumsum(freq))
+# Now repeat this process for country2 (other side of the link)
+# start2 must begin at the sum of all start1s for that country
+#links <- ddply(links, .(country1), transform, start1tot=sum(freq))
+#links <- ddply(links, .(country2), transform, start2=start1tot + cumsum(freq))
+# copy start2 to end2
+#links$end2 <- links$start2
+# for mapping to width domain
+#links <- ddply(links, .(country2), transform, runtot2=cumsum(freq))
+# modify start2 so that it begins at 0 (substract freq)
+#links$start2 <- links$start2 - links$freq
+
+d <- paste(links$country1, links$start1, links$end1, 
+		links$country2, links$start2, links$end2)
+write(d, "links.tpp.txt")
+
+########## Ideogram file
+
+# ideogram widths based on number of dyads
 a <- ddply(links, .(country1), summarize, tot=sum(freq))
 names(a)[1] <- "country"
 b <- ddply(links, .(country2), summarize, tot=sum(freq))
@@ -197,35 +226,6 @@ capwords <- function(s, strict = FALSE) {
 names <- capwords(names, strict=TRUE)
 d <- paste("chr - ", df$country, " ", df$country, " 0 ", df$tot, " set3-12-qual-", rep(1:12), sep="")
 write(d, "karyotype.tpp.txt")
-
-# copy start1 to end1
-links$end1 <- links$start1
-# for mapping to width domain
-links <- ddply(links, .(country1), transform, runtot1=cumsum(freq))
-# modify start1 so that it begins at 0 (substract freq)
-links$start1 <- links$start1 - links$freq
-# Now repeat this process for country2 (other side of the link)
-# start2 must begin at the sum of all start1s for that country
-links <- ddply(links, .(country1), transform, start1tot=sum(freq))
-links <- ddply(links, .(country2), transform, start2=start1tot + cumsum(freq))
-# copy start2 to end2
-links$end2 <- links$start2
-# for mapping to width domain
-#links <- ddply(links, .(country2), transform, runtot2=cumsum(freq))
-# modify start2 so that it begins at 0 (substract freq)
-links$start2 <- links$start2 - links$freq
-
-
-
-# Now modify widths of links based on total widths of countries
-#links$start1 <- (links$start1 * links$w) / links$runtot1
-#links$end1 <- (links$end1 * links$w) / links$runtot1
-#links$start2 <- (links$start2 * links$w) / links$runtot2
-#links$end2 <- (links$end2 * links$w) / links$runtot2
-
-d <- paste(links$country1, links$start1, links$end1, 
-		links$country2, links$start2, links$end2)
-write(d, "links.tpp.txt")
 
 ######################
 # Probably would make sense to do it by line (group)
