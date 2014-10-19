@@ -224,8 +224,18 @@ capwords <- function(s, strict = FALSE) {
 	sapply(strsplit(s, split = " "), cap, USE.NAMES = !is.null(names(s)))
 }
 names <- capwords(names, strict=TRUE)
-d <- paste("chr - ", df$country, " ", df$country, " 0 ", df$tot, " set3-12-qual-", rep(1:12), sep="")
+d <- paste("chr - ", df$country, " ", df$country, " 0 ", df$tot, " ", tolower(df$country), sep="")
 write(d, "karyotype.tpp.txt")
+
+
+######################
+# Label data file output
+######################
+
+#hs1 225817866 225910748 ZNF678 color=red
+d <- paste(links$country1, links$start1, links$end1, links$country2)
+d <- rbind(d, paste(links$country2, links$start2, links$end2, links$country1))
+write(d, "labels.tpp.txt")
 
 ######################
 # Probably would make sense to do it by line (group)
